@@ -16,59 +16,317 @@ const Toast = {
   }
 };
 
+// ── Markdown Parser for AI Chat ─────────────────────────────
+function renderMarkdown(text) {
+  if (!text) return '';
+  let html = text;
+  html = html.replace(/```([\s\S]*?)```/g, '<pre class="bg-surface-container-high p-3 rounded-lg text-xs overflow-x-auto my-2 font-mono"><code>$1</code></pre>');
+  html = html.replace(/^### (.*$)/gim, '<h3 class="font-bold text-base mt-3 mb-1 text-primary">$1</h3>');
+  html = html.replace(/^## (.*$)/gim, '<h4 class="font-bold text-sm mt-2 mb-1 text-on-surface">$1</h4>');
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+  html = html.replace(/^\s*[\-\•]\s+(.*$)/gim, '<li class="ml-4 list-disc">$1</li>');
+  html = html.replace(/(<li.*?>.*?<\/li>\n?)+/g, '<ul class="my-1 space-y-0.5 font-normal">$&</ul>');
+  html = html.replace(/\n(?!(?:<\/ul>|<ul|<li|<pre|<h3|<h4))/g, '<br/>');
+  return html;
+}
+
+// ── Built-in Intelligent Business Data Engine ──────────────
+const DataAI = {
+  analyze(query) {
+    const q = query.toLowerCase().trim();
+    const AE = AnalyticsEngine;
+
+    // 1. Specific Customer Search (e.g. CUST012 or customer Alex)
+    const custMatch = q.match(/cust\d{3}/i) || q.match(/(alex|sarah|james|maria|david|emma|ryan|olivia|liam|sophia)/i);
+    if (custMatch) {
+      const term = custMatch[0].toLowerCase();
+      const found = AE.topCustomers.find(c => c.name.toLowerCase().includes(term) || c.email.toLowerCase().includes(term))
+                 || AE.customerList.find(c => c.id.toLowerCase() === term);
+      if (found) {
+        const cLtv = found.ltv || ('₹' + found.totalSpent.toLocaleString());
+        return `### 👤 Customer Profile: ${found.name || found.id}
+- **Customer ID:** ${found.id || 'N/A'}
+- **Gender & Age:** ${found.gender}, ${found.age} years old
+- **Total Spent (LTV):** **${cLtv}**
+- **Transactions:** ${found.transactions || 1} orders placed
+- **Cohort Segment:** **${found.cohort || 'Loyalist'}**
+- **Current Status:** ${found.status || 'Active'}`;
+      }
+    }
+
+    // 2. Category Deep-Dive
+    if (q.includes('beauty') || q.includes('clothing') || q.includes('electronics')) {
+      let targetCat = 'Beauty';
+      if (q.includes('clothing')) targetCat = 'Clothing';
+      if (q.includes('electronics')) targetCat = 'Electronics';
+      const data = AE.categories[targetCat];
+      const prods = AE.products.filter(p => p.cat === targetCat);
+      return `### 📦 Category Deep-Dive: ${targetCat}
+- **Total Revenue:** **₹${data.revenue.toLocaleString()}**
+- **Total Units Sold:** **${data.qty} units**
+- **Total Orders:** **${data.count} transactions**
+- **Product Tiers in ${targetCat}:**
+${prods.map(p => `  • **${p.name} (₹${p.price}/unit):** ${p.qtySold} sold | Revenue: ₹${p.revenue.toLocaleString()} | Stock: ${p.stock} units (${p.status})`).join('\n')}`;
+    }
+
+    // 3. Category Comparison / Best Category
+    if (q.includes('category') || q.includes('categories')) {
+      const sortedCats = Object.entries(AE.categories).sort((a,b) => b[1].revenue - a[1].revenue);
+      return `### 📦 Product Categories Performance
+- **Top Category:** **${sortedCats[0][0]}** generating **₹${sortedCats[0][1].revenue.toLocaleString()}** (${sortedCats[0][1].qty} units sold across ${sortedCats[0][1].count} orders).
+- **Full Category Breakdown:**
+${sortedCats.map(([cat, d]) => `  • **${cat}:** ₹${d.revenue.toLocaleString()} | ${d.qty} units sold | ${d.count} orders`).join('\n')}`;
+    }
+
+    // 4. Total Revenue / Sales / Orders / Revenue metrics
+    if (q.includes('revenue') || q.includes('sales') || q.includes('income') || q.includes('earnings') || q.includes('how much')) {
+      const highestMonthIdx = AE.monthlyRev.indexOf(Math.max(...AE.monthlyRev));
+      const lowestMonthIdx = AE.monthlyRev.indexOf(Math.min(...AE.monthlyRev));
+      return `### 💰 Revenue & Sales Intelligence
+- **Total Revenue:** **₹${AE.totalRevenue.toLocaleString()}**
+- **Total Transactions:** **${AE.totalTransactions}** orders
+- **Total Quantity Sold:** **${AE.totalQty}** items
+- **Average Order Value (AOV):** **₹${AE.avgOrderValue.toFixed(2)}**
+- **Peak Sales Month:** **${AE.MONTHS[highestMonthIdx]}** (₹${AE.monthlyRev[highestMonthIdx].toLocaleString()})
+- **Lowest Sales Month:** **${AE.MONTHS[lowestMonthIdx]}** (₹${AE.monthlyRev[lowestMonthIdx].toLocaleString()})
+- **Growth Velocity (H1 vs H2):** **${AE.growthPct >= 0 ? '+' : ''}${AE.growthPct.toFixed(1)}%** growth trend`;
+    }
+
+    // 5. Stock / Inventory / Restock Alerts
+    if (q.includes('stock') || q.includes('inventory') || q.includes('critical') || q.includes('alert') || q.includes('deplet') || q.includes('restock')) {
+      const criticals = AE.products.filter(p => p.status === 'Critical');
+      const lowStock = AE.products.filter(p => p.status === 'Low Stock');
+      return `### ⚠️ Inventory & Stock Status
+- **Critical Restock Warnings (${criticals.length}):**
+${criticals.map(p => `  • **${p.name}:** Only ${p.stock} units left! (Last sale: ${p.depletion})`).join('\n')}
+- **Low Stock Items (${lowStock.length}):**
+${lowStock.map(p => `  • **${p.name}:** ${p.stock} units remaining.`).join('\n')}
+- **Action Required:** Immediate procurement required for critical SKUs to avoid stockouts.`;
+    }
+
+    // 6. Customers & Demographics
+    if (q.includes('customer') || q.includes('client') || q.includes('user') || q.includes('demographic') || q.includes('gender') || q.includes('age') || q.includes('cohort')) {
+      const topCust = AE.topCustomers[0];
+      return `### 👥 Customer Insights & Demographics
+- **Total Unique Customers:** **${AE.totalCustomers}**
+- **Top Customer:** **${topCust.name}** (LTV: **${topCust.ltv}**)
+- **Gender Breakdown:**
+  • **Female:** ${AE.genderStats.Female.count} purchases (₹${AE.genderStats.Female.revenue.toLocaleString()})
+  • **Male:** ${AE.genderStats.Male.count} purchases (₹${AE.genderStats.Male.revenue.toLocaleString()})
+- **Customer Segmentation Cohorts:**
+  • **Champions (≥₹1,500):** ${AE.cohorts.Champions.length} customers
+  • **Big Spenders (₹900–₹1,500):** ${AE.cohorts['Big Spenders'].length} customers
+  • **Loyalists (₹200–₹900):** ${AE.cohorts.Loyalists.length} customers
+  • **At Risk (<₹200):** ${AE.cohorts['At Risk'].length} customers`;
+    }
+
+    // 7. Forecast & Future Growth
+    if (q.includes('forecast') || q.includes('predict') || q.includes('future') || q.includes('next month') || q.includes('h1 2024') || q.includes('projection')) {
+      return `### 📈 Predictive Sales Forecast
+- **Projected H1 Next Year Revenue:** **₹${AE.projectedH1Next.toLocaleString()}**
+- **Forecast Model Confidence:** **94.2%**
+- **Monthly Revenue Projections (Next 6 Months):**
+${AE.forecastMonths.map((val, i) => `  • **Month ${i+1}:** ₹${val.toLocaleString()}`).join('\n')}
+- **Growth Driver:** High repeat sales velocity in Electronics and Beauty categories.`;
+    }
+
+    // 8. Strategy / Optimization / Drop / Advice
+    if (q.includes('why') || q.includes('strategy') || q.includes('optimize') || q.includes('grow') || q.includes('recommend') || q.includes('advice') || q.includes('drop')) {
+      return `### 💡 Strategic Growth Recommendations
+1. **Focus on Champions:** Your ${AE.cohorts.Champions.length} Champions generate 3.2× more revenue per order. Launch early-access offers for top-tier items (₹500 tier).
+2. **Prevent Inventory Bottlenecks:** Restock **${AE.products.filter(p=>p.status==='Critical')[0]?.name || 'Critical Items'}** immediately to capture unfulfilled demand.
+3. **Cross-Sell Campaign:** Target male customers (avg age 37) who buy Electronics with complementary Beauty/Grooming bundles to increase AOV past **₹${(AE.avgOrderValue * 1.25).toFixed(0)}**.`;
+    }
+
+    // 9. Greetings
+    if (q.includes('hello') || q.includes('hi') || q.includes('hey') || q.includes('who are you') || q.includes('help')) {
+      return `Hello! 👋 I am your Prospera AI Business Copilot.
+
+I can analyze your 250 sales transactions, customer cohorts, category statistics, and forecast models.
+
+**Try asking me:**
+- *"What is our total revenue?"*
+- *"Which items are critical in stock?"*
+- *"Show me Electronics category sales"*
+- *"Who is our top spending customer?"*
+- *"What is the forecast for next month?"*`;
+    }
+
+    // Default Fallback: Comprehensive analytical summary
+    const bestCat = Object.entries(AE.categories).sort((a,b)=>b[1].revenue-a[1].revenue)[0];
+    return `### 📊 Real-Time Business Analysis
+
+Here is a summary of your sales dataset based on your prompt:
+
+- **Total Revenue:** **₹${AE.totalRevenue.toLocaleString()}** across **${AE.totalTransactions} transactions**
+- **Average Order Value:** **₹${AE.avgOrderValue.toFixed(0)}**
+- **Top Product Category:** **${bestCat[0]}** (₹${bestCat[1].revenue.toLocaleString()})
+- **Customer Base:** **${AE.totalCustomers} unique customers** (${AE.cohorts.Champions.length} Champions)
+- **Stock Alert:** **${AE.products.filter(p=>p.status==='Critical').length} critical inventory items** require restocking.
+- **Forecast H1:** **₹${AE.projectedH1Next.toLocaleString()}** projected revenue.
+
+*Tip: Click the 🔑 key icon above to add a Google Gemini or OpenAI API Key for open generative conversations!*`;
+  }
+};
+
 // ── AI Copilot ────────────────────────────────────────────
 const AICopilot = {
-  responses: [
-    "Q3 revenue is up **12.5%** vs Q2. North America leads with +15.2% YoY growth. EMEA is on track at 92% of target.",
-    "**12 critical inventory depletions** detected in the next 14 days. Quantum Processor Core X9 is most urgent — only 3 days of stock remaining.",
-    "The **Champions cohort** (2,405 customers) is 3.2× more responsive to early-access campaigns. I recommend targeting them for the Q4 product launch.",
-    "Forecast accuracy stands at **94.2%**. 14 at-risk opportunities flagged, mostly in APAC where seasonal demand variance is highest.",
-    "System health is at **99.9%** uptime. The Payment Gateway API is approaching its rate limit — consider increasing quota.",
-    "I can help you build a custom report. Which dataset — Inventory, Revenue, Customers, or Forecasts?",
-    "Sales trend shows a consistent upward curve. I predict **$148,200 revenue** next month if current velocity holds."
-  ],
-  _idx: 0,
-  getResponse() { return this.responses[this._idx++ % this.responses.length]; },
+  provider: localStorage.getItem('prospera_ai_provider') || 'local',
+  apiKey: localStorage.getItem('prospera_ai_key') || '',
+
+  updateBadge() {
+    const badge = document.getElementById('ai-engine-badge');
+    if (!badge) return;
+    if (this.provider === 'gemini' && this.apiKey) {
+      badge.textContent = 'Gemini AI';
+      badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-success/10 text-success';
+    } else if (this.provider === 'openai' && this.apiKey) {
+      badge.textContent = 'ChatGPT AI';
+      badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-success/10 text-success';
+    } else {
+      badge.textContent = 'Data Engine';
+      badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary';
+    }
+  },
+
+  async queryAI(userMsg) {
+    // 1. Google Gemini API
+    if (this.provider === 'gemini' && this.apiKey) {
+      try {
+        const AE = AnalyticsEngine;
+        const systemContext = `You are Prospera AI, a senior business intelligence expert. You have real-time access to the company's dataset:
+Total Revenue: ₹${AE.totalRevenue.toLocaleString()}, Total Transactions: ${AE.totalTransactions}, Avg Order Value: ₹${AE.avgOrderValue.toFixed(2)}, Categories: ${JSON.stringify(AE.categories)}, Top Customers: ${JSON.stringify(AE.topCustomers.slice(0,5))}, Critical Inventory: ${JSON.stringify(AE.products.filter(p=>p.status==='Critical'))}.
+Answer concisely, accurately, and professionally in markdown with Indian Rupees (₹).`;
+
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${this.apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: `${systemContext}\n\nUser Question: ${userMsg}` }] }]
+          })
+        });
+        const data = await res.json();
+        if (data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
+          return data.candidates[0].content.parts[0].text;
+        }
+      } catch (err) {
+        console.warn('Gemini API Error, falling back to local engine:', err);
+      }
+    }
+
+    // 2. OpenAI ChatGPT API
+    if (this.provider === 'openai' && this.apiKey) {
+      try {
+        const AE = AnalyticsEngine;
+        const systemContext = `You are Prospera AI, a senior business intelligence expert. You have real-time access to the company's dataset:
+Total Revenue: ₹${AE.totalRevenue.toLocaleString()}, Total Transactions: ${AE.totalTransactions}, Avg Order Value: ₹${AE.avgOrderValue.toFixed(2)}, Categories: ${JSON.stringify(AE.categories)}, Top Customers: ${JSON.stringify(AE.topCustomers.slice(0,5))}, Critical Inventory: ${JSON.stringify(AE.products.filter(p=>p.status==='Critical'))}.
+Answer concisely, accurately, and professionally in markdown with Indian Rupees (₹).`;
+
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.apiKey}` },
+          body: JSON.stringify({
+            model: 'gpt-3.5-turbo',
+            messages: [
+              { role: 'system', content: systemContext },
+              { role: 'user', content: userMsg }
+            ]
+          })
+        });
+        const data = await res.json();
+        if (data.choices && data.choices[0]?.message?.content) {
+          return data.choices[0].message.content;
+        }
+      } catch (err) {
+        console.warn('OpenAI API Error, falling back to local engine:', err);
+      }
+    }
+
+    // 3. Fallback: Prospera Local Business Data Engine
+    return DataAI.analyze(userMsg);
+  },
+
   init() {
     const container = document.getElementById('ai-chat-container');
     const input = document.getElementById('ai-input');
     const sendBtn = document.getElementById('ai-send');
     if (!container || !input || !sendBtn) return;
 
+    this.updateBadge();
+
+    // Provider modal logic
+    const configBtn = document.getElementById('ai-config-btn');
+    const keyModal = document.getElementById('ai-key-modal');
+    const closeModalBtn = document.getElementById('close-key-modal');
+    const providerSelect = document.getElementById('ai-provider-select');
+    const keyInputGroup = document.getElementById('api-key-input-group');
+    const apiKeyInput = document.getElementById('ai-api-key');
+    const saveKeyBtn = document.getElementById('save-ai-key');
+
+    if (configBtn && keyModal) {
+      configBtn.addEventListener('click', () => {
+        keyModal.classList.toggle('hidden');
+        if (providerSelect) providerSelect.value = AICopilot.provider;
+        if (apiKeyInput) apiKeyInput.value = AICopilot.apiKey;
+        if (keyInputGroup) keyInputGroup.classList.toggle('hidden', AICopilot.provider === 'local');
+      });
+    }
+    if (closeModalBtn) closeModalBtn.addEventListener('click', () => keyModal.classList.add('hidden'));
+    if (providerSelect) {
+      providerSelect.addEventListener('change', () => {
+        if (keyInputGroup) keyInputGroup.classList.toggle('hidden', providerSelect.value === 'local');
+      });
+    }
+    if (saveKeyBtn) {
+      saveKeyBtn.addEventListener('click', () => {
+        AICopilot.provider = providerSelect.value;
+        AICopilot.apiKey = apiKeyInput.value.trim();
+        localStorage.setItem('prospera_ai_provider', AICopilot.provider);
+        localStorage.setItem('prospera_ai_key', AICopilot.apiKey);
+        AICopilot.updateBadge();
+        keyModal.classList.add('hidden');
+        Toast.show(`AI Engine updated to ${AICopilot.provider.toUpperCase()}!`, 'success');
+      });
+    }
+
     const addMessage = (text, isUser) => {
       const div = document.createElement('div');
-      div.className = `flex flex-col ${isUser?'items-end':'items-start'} gap-1 animate-fade-in`;
+      div.className = `flex flex-col ${isUser ? 'items-end' : 'items-start'} gap-1 animate-fade-in`;
       const bubble = document.createElement('div');
       bubble.className = isUser
         ? 'bg-surface-container text-on-surface px-4 py-3 rounded-2xl rounded-tr-sm max-w-[85%] shadow-sm'
         : 'bg-primary/5 border border-primary/20 text-on-surface px-4 py-3 rounded-2xl rounded-tl-sm max-w-[95%] shadow-sm';
       bubble.style.fontSize = '14px';
-      bubble.innerHTML = text.replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+      bubble.style.lineHeight = '1.5';
+      bubble.innerHTML = isUser ? text.replace(/\n/g, '<br/>') : renderMarkdown(text);
       div.appendChild(bubble);
       container.appendChild(div);
       container.scrollTop = container.scrollHeight;
     };
 
-    const send = () => {
+    const send = async () => {
       const msg = input.value.trim();
       if (!msg) return;
       addMessage(msg, true);
       input.value = '';
+      input.style.height = '40px';
+
       const loader = document.createElement('div');
       loader.className = 'flex items-center gap-2 p-3 bg-surface-container-low rounded-2xl rounded-tl-sm w-fit';
       loader.innerHTML = `<div style="width:8px;height:8px;border-radius:50%;background:#4f46e5;animation:bounce .6s infinite 0ms"></div><div style="width:8px;height:8px;border-radius:50%;background:#4f46e5;animation:bounce .6s infinite 150ms"></div><div style="width:8px;height:8px;border-radius:50%;background:#4f46e5;animation:bounce .6s infinite 300ms"></div>`;
       container.appendChild(loader);
       container.scrollTop = container.scrollHeight;
-      setTimeout(() => { loader.remove(); addMessage(AICopilot.getResponse(), false); }, 1200);
+
+      const aiResponse = await AICopilot.queryAI(msg);
+      loader.remove();
+      addMessage(aiResponse, false);
     };
 
     sendBtn.addEventListener('click', send);
-    input.addEventListener('keydown', e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
+    input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 128) + 'px'; });
 
-    // Auto-resize textarea
-    input.addEventListener('input', () => { input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,128)+'px'; });
-
-    // Suggestion chips
     document.addEventListener('click', e => {
       const chip = e.target.closest('.ai-suggestion');
       if (chip) { input.value = chip.textContent.trim(); send(); }
@@ -210,8 +468,8 @@ function renderDashboard() {
     if (!ctx) return;
     activeChart = new Chart(ctx, {
       type: 'line',
-      data: { labels:['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug'], datasets:[{ label:'Revenue', data:[42000,55000,48000,72000,68000,95000,88000,124500], borderColor:'#4f46e5', backgroundColor:'rgba(79,70,229,0.08)', borderWidth:2.5, tension:0.4, fill:true, pointBackgroundColor:'#4f46e5', pointBorderColor:'#fff', pointRadius:4, pointHoverRadius:6 }] },
-      options: { ...defaultChartOptions(), plugins:{ legend:{display:false}, tooltip:{ backgroundColor:'#191c1d', padding:12, cornerRadius:8, callbacks:{ label:ctx=>'$'+ctx.parsed.y.toLocaleString() } } }, scales:{ y:{ beginAtZero:false, grid:{color:'#f3f4f5'}, ticks:{ callback:v=>'$'+(v/1000)+'k', font:{family:"'Inter',sans-serif",size:11}, color:'#777587' }, border:{display:false} }, x:{ grid:{display:false}, ticks:{font:{family:"'Inter',sans-serif",size:11},color:'#777587'}, border:{display:false} } } }
+      data: { labels: ProspecraData.chartData.monthLabels, datasets:[{ label:'Revenue', data: ProspecraData.chartData.monthlyRevenue, borderColor:'#4f46e5', backgroundColor:'rgba(79,70,229,0.08)', borderWidth:2.5, tension:0.4, fill:true, pointBackgroundColor:'#4f46e5', pointBorderColor:'#fff', pointRadius:4, pointHoverRadius:6 }] },
+      options: { ...defaultChartOptions(), plugins:{ legend:{display:false}, tooltip:{ backgroundColor:'#191c1d', padding:12, cornerRadius:8, callbacks:{ label:ctx=>'₹'+ctx.parsed.y.toLocaleString() } } }, scales:{ y:{ beginAtZero:false, grid:{color:'#f3f4f5'}, ticks:{ callback:v=>'₹'+v.toLocaleString(), font:{family:"'Inter',sans-serif",size:11}, color:'#777587' }, border:{display:false} }, x:{ grid:{display:false}, ticks:{font:{family:"'Inter',sans-serif",size:11},color:'#777587'}, border:{display:false} } } }
     });
   });
 }
@@ -235,7 +493,7 @@ function renderAnalytics() {
       </div>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      ${[{label:'Total Revenue',val:'$4.2M',trend:'+12.5%',up:true,icon:'payments'},{label:'Avg Deal Size',val:'$124K',trend:'+4.2%',up:true,icon:'request_quote'},{label:'Customer Churn',val:'1.8%',trend:'+0.3%',up:false,icon:'person_remove'}].map(k=>`
+      ${[{label:'Total Revenue',val:ProspecraData.kpis.revenue.value,trend:ProspecraData.kpis.revenue.trend,up:ProspecraData.kpis.revenue.up,icon:'payments'},{label:'Avg Deal Size',val:ProspecraData.kpis.conversion.value,trend:'+4.2%',up:true,icon:'request_quote'},{label:'Customer Churn',val:'1.8%',trend:'+0.3%',up:false,icon:'person_remove'}].map(k=>`
       <div class="bg-surface rounded-xl p-6 shadow-sm border border-outline-variant/10 hover:shadow-md transition-shadow">
         <div class="flex justify-between items-start mb-4"><h3 style="font-size:11px;font-weight:700;letter-spacing:.05em" class="text-outline uppercase tracking-wider">${k.label}</h3><div class="w-8 h-8 rounded-full bg-${k.up?'primary':'error'}/10 flex items-center justify-center text-${k.up?'primary':'error'}"><span class="material-symbols-outlined text-[18px]">${k.icon}</span></div></div>
         <div style="font-size:30px;font-weight:700;line-height:38px" class="text-on-surface mb-1">${k.val}</div>
@@ -261,9 +519,9 @@ function renderAnalytics() {
           </tr></thead>
           <tbody class="divide-y divide-outline-variant/10" style="font-size:14px" id="regions-tbody">
             ${[
-              {region:'North America',dot:'bg-primary',rev:'$1.8M',pct:104,growth:'+15.2%',gc:'text-success',status:'Exceeding',sc:'bg-success/10 text-success'},
-              {region:'EMEA',dot:'bg-tertiary',rev:'$1.4M',pct:92,growth:'+8.4%',gc:'text-success',status:'On Track',sc:'bg-warning/10 text-warning'},
-              {region:'APAC',dot:'bg-outline-variant',rev:'$1.0M',pct:78,growth:'-2.1%',gc:'text-error',status:'At Risk',sc:'bg-error/10 text-error'}
+              {region:'North America',dot:'bg-primary',rev:'₹1.8M',pct:104,growth:'+15.2%',gc:'text-success',status:'Exceeding',sc:'bg-success/10 text-success'},
+              {region:'EMEA',dot:'bg-tertiary',rev:'₹1.4M',pct:92,growth:'+8.4%',gc:'text-success',status:'On Track',sc:'bg-warning/10 text-warning'},
+              {region:'APAC',dot:'bg-outline-variant',rev:'₹1.0M',pct:78,growth:'-2.1%',gc:'text-error',status:'At Risk',sc:'bg-error/10 text-error'}
             ].map(r=>`
             <tr class="hover:bg-surface-container-lowest/50 transition-colors region-row" data-region="${r.region.toLowerCase()}">
               <td class="py-4 px-6 font-medium"><div class="flex items-center gap-3"><div class="w-2 h-2 rounded-full ${r.dot}"></div>${r.region}</div></td>
@@ -290,7 +548,7 @@ function renderAnalytics() {
         {label:'EMEA',data:[350,360,375,410,430,460],borderColor:'#414855',backgroundColor:'transparent',borderWidth:2,tension:0.4,pointBackgroundColor:'#414855',pointBorderColor:'#fff',pointRadius:4,pointHoverRadius:6},
         {label:'APAC',data:[280,270,290,305,310,320],borderColor:'#c7c4d8',backgroundColor:'transparent',borderWidth:2,tension:0.4,pointBackgroundColor:'#c7c4d8',pointBorderColor:'#fff',pointRadius:4,pointHoverRadius:6}
       ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',align:'end',labels:{usePointStyle:true,boxWidth:6,boxHeight:6,font:{family:"'Inter',sans-serif",size:12},color:'#464555'}},tooltip:{backgroundColor:'#191c1d',padding:12,cornerRadius:8,callbacks:{label:ctx=>`${ctx.dataset.label}: $${ctx.parsed.y}k`}}},scales:{y:{beginAtZero:true,grid:{color:'#e1e3e4'},ticks:{callback:v=>'$'+v+'k',font:{family:"'Inter',sans-serif",size:12},color:'#777587'},border:{display:false}},x:{grid:{display:false},ticks:{font:{family:"'Inter',sans-serif",size:12},color:'#777587'},border:{display:false}}},interaction:{intersect:false,mode:'index'}}
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'top',align:'end',labels:{usePointStyle:true,boxWidth:6,boxHeight:6,font:{family:"'Inter',sans-serif",size:12},color:'#464555'}},tooltip:{backgroundColor:'#191c1d',padding:12,cornerRadius:8,callbacks:{label:ctx=>`${ctx.dataset.label}: ₹${ctx.parsed.y}k`}}},scales:{y:{beginAtZero:true,grid:{color:'#e1e3e4'},ticks:{callback:v=>'₹'+v+'k',font:{family:"'Inter',sans-serif",size:12},color:'#777587'},border:{display:false}},x:{grid:{display:false},ticks:{font:{family:"'Inter',sans-serif",size:12},color:'#777587'},border:{display:false}}},interaction:{intersect:false,mode:'index'}}
     });
   });
 }
@@ -359,7 +617,7 @@ function renderForecasts() {
         {label:'Upper Band',data:[null,null,null,null,510,545,580,625,680,740,770,820],borderColor:'rgba(79,70,229,0.2)',backgroundColor:'rgba(79,70,229,0.07)',borderWidth:1,fill:'+1',tension:0.4,pointRadius:0},
         {label:'Lower Band',data:[null,null,null,null,450,475,500,535,560,600,630,680],borderColor:'rgba(79,70,229,0.2)',backgroundColor:'rgba(79,70,229,0.07)',borderWidth:1,fill:false,tension:0.4,pointRadius:0}
       ]},
-      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,backgroundColor:'#191c1d',padding:12,cornerRadius:8,callbacks:{label:ctx=>ctx.dataset.label+': $'+ctx.parsed.y+'k'}}},scales:{y:{grid:{color:'#f3f4f5'},ticks:{callback:v=>'$'+v+'k',color:'#777587',font:{family:"'Inter',sans-serif",size:12}},border:{display:false}},x:{grid:{display:false},ticks:{color:'#777587',font:{family:"'Inter',sans-serif",size:12}},border:{display:false}}},interaction:{intersect:false,mode:'index'}}
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false,backgroundColor:'#191c1d',padding:12,cornerRadius:8,callbacks:{label:ctx=>ctx.dataset.label+': ₹'+ctx.parsed.y+'k'}}},scales:{y:{grid:{color:'#f3f4f5'},ticks:{callback:v=>'₹'+v+'k',color:'#777587',font:{family:"'Inter',sans-serif",size:12}},border:{display:false}},x:{grid:{display:false},ticks:{color:'#777587',font:{family:"'Inter',sans-serif",size:12}},border:{display:false}}},interaction:{intersect:false,mode:'index'}}
     });
   });
 }
@@ -403,7 +661,7 @@ function renderInventory() {
       <div class="bg-surface rounded-xl p-6 shadow-sm border border-surface-container flex flex-col justify-between h-32 relative overflow-hidden">
         <div class="absolute -right-4 -top-4 w-24 h-24 bg-primary/10 rounded-full blur-xl pointer-events-none"></div>
         <span style="font-size:12px;font-weight:500" class="text-on-surface-variant">Forecasted Procurement Value</span>
-        <div class="flex items-baseline gap-3 mt-2"><span style="font-size:36px;font-weight:700" class="text-on-surface">$84.2k</span><span style="font-size:12px;font-weight:500" class="text-outline">Next 30 Days</span></div>
+        <div class="flex items-baseline gap-3 mt-2"><span style="font-size:36px;font-weight:700" class="text-on-surface">₹84.2k</span><span style="font-size:12px;font-weight:500" class="text-outline">Next 30 Days</span></div>
       </div>
     </div>
     <div class="bg-surface rounded-xl shadow-sm border border-surface-container overflow-hidden">
@@ -485,7 +743,7 @@ function renderStrategy() {
         <div class="grid grid-cols-2 gap-4" style="min-height:320px">${cohortCards}</div>
       </div>
       <div class="lg:col-span-4 flex flex-col gap-6">
-        ${[{label:'TOTAL CUSTOMERS',val:'8,641',badge:'+12.4%',icon:'groups'},{label:'AVG. CLV',val:'$1,240',badge:'+5.2%',icon:'monitoring'}].map(k=>`
+        ${[{label:'TOTAL CUSTOMERS',val:ProspecraData.kpis.users.value,badge:'+12.4%',icon:'groups'},{label:'AVG. CLV',val:ProspecraData.kpis.conversion.value,badge:'+5.2%',icon:'monitoring'}].map(k=>`
         <div class="bg-surface rounded-xl shadow-sm border border-surface-variant p-6">
           <div class="flex justify-between items-start mb-4"><h4 style="font-size:11px;letter-spacing:.05em;font-weight:700" class="text-on-surface-variant uppercase">${k.label}</h4><span class="material-symbols-outlined text-on-surface-variant">${k.icon}</span></div>
           <div class="flex items-baseline gap-3"><span style="font-size:36px;font-weight:700" class="text-on-surface">${k.val}</span><span class="text-success flex items-center bg-success/10 px-2 py-1 rounded-full" style="font-size:12px;font-weight:500"><span class="material-symbols-outlined text-[14px]">arrow_upward</span>${k.badge}</span></div>
